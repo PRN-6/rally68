@@ -1,34 +1,43 @@
-import '@testing-library/jest-dom';
-import { vi } from 'vitest';
-import React from 'react';
-import '@testing-library/jest-dom/vitest';
+import '@testing-library/jest-dom'
 
-// Mock Three.js and R3F since they require WebGL
-vi.mock('three', async () => {
-  const actual = await vi.importActual('three');
-  return {
-    ...actual,
-    WebGLRenderer: vi.fn().mockImplementation(() => ({
-      render: vi.fn(),
-      dispose: vi.fn(),
-      setSize: vi.fn(),
-    })),
-  };
-});
+// Mock Web Audio API for tests
+class AudioNodeMock {
+  connect() { return this }
+  disconnect() {}
+}
 
-vi.mock('@react-three/fiber', async () => {
-  return {
-    Canvas: ({ children }: any) => {
-      return React.createElement('div', { 'data-testid': 'r3f-canvas' }, children);
-    },
-    useFrame: () => {},
-  };
-});
+class AudioParamMock {
+  value = 0
+  setTargetAtTime() {}
+  setValueAtTime() {}
+  linearRampToValueAtTime() {}
+  exponentialRampToValueAtTime() {}
+}
 
-vi.mock('@react-three/drei', async () => {
-  return {
-    OrbitControls: () => {
-      return React.createElement('div', { 'data-testid': 'orbit-controls' });
-    },
-  };
-});
+class GainNodeMock extends AudioNodeMock {
+  gain = new AudioParamMock()
+}
+
+class OscillatorNodeMock extends AudioNodeMock {
+  frequency = new AudioParamMock()
+  type = 'sine'
+  start() {}
+  stop() {}
+}
+
+class AudioContextMock {
+  state = 'running'
+  currentTime = 0
+  destination = new AudioNodeMock()
+  createGain() { return new GainNodeMock() }
+  createOscillator() { return new OscillatorNodeMock() }
+  resume() { this.state = 'running'; return Promise.resolve() }
+  suspend() { this.state = 'suspended'; return Promise.resolve() }
+  close() { this.state = 'closed'; return Promise.resolve() }
+}
+
+if (typeof window !== 'undefined') {
+  (window as any).AudioContext = AudioContextMock
+  ;(window as any).webkitAudioContext = AudioContextMock
+}
+

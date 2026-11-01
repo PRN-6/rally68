@@ -1,7 +1,7 @@
 import { useMemo, useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { Road } from './Road'
-import { getTrackCache, TRACK_DEFINITIONS } from './Track'
+import { getTrackCache, getNearestTrackInfo, TRACK_DEFINITIONS } from './Track'
 import { createObstacleGrid, setActiveObstacleGrid, type ObstacleCollider } from './collisions'
 import { useGameStore } from '../store/gameStore'
 
@@ -85,9 +85,28 @@ export function Environment({ trackId }: { trackId?: string }) {
 
       for (const side of [-1, 1]) {
         for (const row of [0, 1]) {
-          const offset = 6.2 + row * 4.5 + (i % 5) * 0.6
+          const offset = 6.8 + row * 4.8 + (i % 5) * 0.6
           const along = ((i % 4) - 1.5) * 1.5
           const pos = p.clone().addScaledVector(t, along).addScaledVector(right, side * offset)
+
+          // Verify that tree is strictly outside the road surface
+          const trackInfo = getNearestTrackInfo(currentTrack, pos)
+          const minTreeClearance = trackInfo.width * 0.5 + 2.2
+
+          if (trackInfo.dist < minTreeClearance) {
+            const away = pos.clone().sub(trackInfo.point).setY(0).normalize()
+            if (away.lengthSq() < 0.01) {
+              away.copy(right).multiplyScalar(side)
+            }
+            pos.copy(trackInfo.point).addScaledVector(away, minTreeClearance + 0.8 + row * 2.5)
+
+            // Re-check distance against all track segments
+            const recheck = getNearestTrackInfo(currentTrack, pos)
+            if (recheck.dist < minTreeClearance) {
+              continue // Skip tree if it conflicts with another track segment
+            }
+          }
+
           const scale = 0.9 + (i % 4) * 0.22 + row * 0.15
           const height = 2.8 + (i % 3) * 0.6
 
@@ -132,10 +151,21 @@ export function Environment({ trackId }: { trackId?: string }) {
       const p = curve.getPoint(u)
       const t = curve.getTangent(u).normalize()
       const right = new THREE.Vector3().crossVectors(up, t).normalize()
-      const side = (i % 2 === 0 ? 1 : -1) * (5.5 + (i % 6) * 0.8)
+      const side = (i % 2 === 0 ? 1 : -1) * (5.8 + (i % 6) * 0.8)
       const pos = p.clone().addScaledVector(right, side)
-      const s = 0.8 + (i % 4) * 0.35
 
+      const trackInfo = getNearestTrackInfo(currentTrack, pos)
+      const minRockClearance = trackInfo.width * 0.5 + 1.2
+      if (trackInfo.dist < minRockClearance) {
+        const away = pos.clone().sub(trackInfo.point).setY(0).normalize()
+        if (away.lengthSq() < 0.01) away.copy(right).multiplyScalar(i % 2 === 0 ? 1 : -1)
+        pos.copy(trackInfo.point).addScaledVector(away, minRockClearance + 0.6)
+
+        const recheck = getNearestTrackInfo(currentTrack, pos)
+        if (recheck.dist < minRockClearance) continue
+      }
+
+      const s = 0.8 + (i % 4) * 0.35
       dummy.position.set(pos.x, pos.y + 0.4 * s, pos.z)
       dummy.rotation.set(i * 0.5, i * 0.8, 0)
       dummy.scale.set(s, s, s)
@@ -160,7 +190,18 @@ export function Environment({ trackId }: { trackId?: string }) {
       const t = curve.getTangent(u).normalize()
       const rot = Math.atan2(t.x, t.z)
       const right = new THREE.Vector3().crossVectors(up, t).normalize()
-      const pos = p.clone().addScaledVector(right, 6.2)
+      const pos = p.clone().addScaledVector(right, 6.4)
+
+      const trackInfo = getNearestTrackInfo(currentTrack, pos)
+      const minFenceClearance = trackInfo.width * 0.5 + 0.8
+      if (trackInfo.dist < minFenceClearance) {
+        const away = pos.clone().sub(trackInfo.point).setY(0).normalize()
+        if (away.lengthSq() < 0.01) away.copy(right)
+        pos.copy(trackInfo.point).addScaledVector(away, minFenceClearance + 0.4)
+
+        const recheck = getNearestTrackInfo(currentTrack, pos)
+        if (recheck.dist < minFenceClearance) continue
+      }
 
       dummy.position.set(pos.x, pos.y + 0.5, pos.z)
       dummy.rotation.set(0, rot, 0)
@@ -186,6 +227,18 @@ export function Environment({ trackId }: { trackId?: string }) {
       const rot = Math.atan2(t.x, t.z)
       const right = new THREE.Vector3().crossVectors(up, t).normalize()
       const pos = p.clone().addScaledVector(right, -16)
+
+      const trackInfo = getNearestTrackInfo(currentTrack, pos)
+      const minHutClearance = trackInfo.width * 0.5 + 4.0
+      if (trackInfo.dist < minHutClearance) {
+        const away = pos.clone().sub(trackInfo.point).setY(0).normalize()
+        if (away.lengthSq() < 0.01) away.copy(right).multiplyScalar(-1)
+        pos.copy(trackInfo.point).addScaledVector(away, minHutClearance + 2.0)
+
+        const recheck = getNearestTrackInfo(currentTrack, pos)
+        if (recheck.dist < minHutClearance) continue
+      }
+
       hutList.push({ pos: [pos.x, pos.y, pos.z], rot })
 
       colliders.push({

@@ -107,5 +107,42 @@ describe('Track Mathematics & Spatial Query System', () => {
       expect(cache.samples.length).toBe(600)
     }
   })
+
+  it('verifies that roadside tree positions are strictly cleared from the road', () => {
+    for (const trackId of ['mountain', 'forest', 'coastal']) {
+      const cache = getTrackCache(trackId)
+      const curve = cache.curve
+      const up = new THREE.Vector3(0, 1, 0)
+      const treeSamples = 60
+
+      for (let i = 0; i < treeSamples; i++) {
+        const u = i / treeSamples
+        const p = curve.getPoint(u)
+        const t = curve.getTangent(u).normalize()
+        const right = new THREE.Vector3().crossVectors(up, t).normalize()
+
+        for (const side of [-1, 1]) {
+          const offset = 6.8 + (i % 5) * 0.6
+          const along = ((i % 4) - 1.5) * 1.5
+          const pos = p.clone().addScaledVector(t, along).addScaledVector(right, side * offset)
+
+          const trackInfo = getNearestTrackInfo(trackId, pos)
+          const minClearance = trackInfo.width * 0.5 + 2.2
+
+          if (trackInfo.dist < minClearance) {
+            const away = pos.clone().sub(trackInfo.point).setY(0).normalize()
+            if (away.lengthSq() < 0.01) away.copy(right).multiplyScalar(side)
+            pos.copy(trackInfo.point).addScaledVector(away, minClearance + 0.8)
+            const recheck = getNearestTrackInfo(trackId, pos)
+            if (recheck.dist < minClearance) continue
+          }
+
+          const finalInfo = getNearestTrackInfo(trackId, pos)
+          expect(finalInfo.offTrack).toBe(true)
+          expect(finalInfo.dist).toBeGreaterThanOrEqual(finalInfo.width * 0.5 + 1.8)
+        }
+      }
+    }
+  })
 })
 
